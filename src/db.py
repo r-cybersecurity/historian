@@ -36,6 +36,7 @@ class SolitudeDB:
             self.connection.close()
         except Exception:
             self.logger.debug("soft_restart_connection continuing")
+        self.commit_ctr = 0
         self.create_connection()
 
     def disconnect(self):
@@ -92,11 +93,9 @@ class SolitudeDB:
                 return True
 
             except Exception as e:
-
                 try:  # try not to lose data currently in cursor
                     self.commit_write()
-                    if self.commit_ctr > 0:
-                        self.logger.info("saved data that was pending commit! :)")
+                    self.logger.info("saved data that was pending commit! :)")
                 except:
                     self.logger.critical("we couldn't save the data, doctor :(")
 

@@ -33,12 +33,12 @@ class Pushshift:
         self.write_queue = queue.Queue(maxsize=6000)
         self.kill_threads = False
 
-    def start_thread(self):
+    def start_db_thread(self):
         self.logger.info("starting data processor")
         self.active_data_processor = threading.Thread(target=self.write_thread_loop)
         self.active_data_processor.start()
 
-    def stop_thread(self):
+    def stop_db_thread(self):
         self.logger.info("setting kill bit, waiting for graceful thread stop")
         self.kill_threads = True
         self.active_data_processor.join()
@@ -50,7 +50,10 @@ class Pushshift:
             try:
                 self.write_thread()
                 if self.kill_threads and self.write_queue.empty():
-                    self.write_db.commit_write()
+                    try:  # we pretty much take it or leave it here
+                        self.write_db.commit_write()
+                    except Exception:
+                        pass
                     self.write_db.disconnect()
                     break
             except Exception as e:

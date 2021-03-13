@@ -1,5 +1,5 @@
 from src.pushshift import Pushshift
-import argparse, logging, signal, sys
+import argparse, logging, os, signal, sys, yaml
 
 tolerant_stop = True
 
@@ -11,7 +11,7 @@ def graceful_stop(signum, frame):
         sys.exit()
     tolerant_stop = False
     logging.warning("Beginning graceful stop")
-    pushshift.stop_thread()
+    pushshift.stop_db_thread()
     logging.warning("System stopped gracefully")
 
 
@@ -23,18 +23,22 @@ parser = argparse.ArgumentParser(
     )
 )
 parser.add_argument(
-    "--cron", help="Fetches ~4d of posts, not everything", action="store_true",
+    "-c", "--cron", help="Fetches ~4d of posts, not everything", action="store_true",
 )
 parser.add_argument(
+    "-t",
     "--type",
     help="Changes type of data to fetch (default: submission) (can use 'both')",
     choices={"comment", "submission", "both"},
     default="submission",
 )
 parser.add_argument(
-    "--subreddits", type=str, nargs="+", help="Subreddits to fetch data for",
+    "-s",
+    "--subreddits",
+    type=str,
+    nargs="+",
+    help="List of subreddits to fetch data for; can also be a YAML file",
 )
-
 parser.add_argument(
     "-d", "--debug", help="Output a metric shitton of runtime data", action="store_true"
 )
@@ -51,12 +55,30 @@ if args.debug:
 elif args.verbose:
     logging.basicConfig(level=logging.INFO)
 
+subreddits = []
+if os.path.isfile(args.subreddits[0]):
+    with open(args.subreddits[0], "r") as config_file:
+        yaml_config = yaml.safe_load(config_file)
+        for classification, subreddits_from_classification in yaml_config.items():
+            for subreddit_from_classification in subreddits_from_classification:
+                subreddits.append(subreddit_from_classification)
+else:
+    subreddits = args.subreddits
+
 pushshift = Pushshift()
-pushshift.start_thread()
+pushshift.start_db_thread()
 
 signal.signal(signal.SIGINT, graceful_stop)
 
-for subreddit in args.subreddits:
-    pushshift.pull_subreddit(subreddit, args.type, args.cron)
+types_to_fetch = []
+if args.type == "both":
+    types_to_fetch.append("submission")
+    types_to_fetch.append("comment")
+else:
+    types_to_fetch.append(args.type)
 
-pushshift.stop_thread()
+for type_to_fetch in types_to_fetch:
+    for subreddit in subreddits:
+        pushshift.pull_subreddit(subreddit, type_to_fetch, args.cron)
+
+pushshift.stop_db_thread()
