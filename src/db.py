@@ -100,7 +100,9 @@ class SolitudeDB:
                     self.logger.critical("we couldn't save the data, doctor :(")
 
                 self.logger.warning(f"write threw: {e}")
-                self.logger.debug(json.dumps(data))
+                self.logger.info(
+                    json.dumps(data)
+                )  # should be debug but I need more info
                 retry_count = retry_count + 1
 
                 if retry_count >= self.max_retries:
