@@ -50,10 +50,18 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+
 if args.debug:
-    logging.basicConfig(level=logging.DEBUG)
+    log_level = logging.DEBUG
 elif args.verbose:
-    logging.basicConfig(level=logging.INFO)
+    log_level = logging.INFO
+else:
+    log_level = logging.WARNING
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=log_level
+)
 
 subreddits = []
 if os.path.isfile(args.subreddits[0]):
