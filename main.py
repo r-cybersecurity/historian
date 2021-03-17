@@ -1,18 +1,5 @@
 from src.pushshift import Pushshift
-import argparse, logging, os, signal, sys, yaml
-
-tolerant_stop = True
-
-
-def graceful_stop(signum, frame):
-    global tolerant_stop
-    if not tolerant_stop:
-        logging.critical("Impatient - killed threads")
-        sys.exit()
-    tolerant_stop = False
-    logging.warning("Beginning graceful stop")
-    pushshift.stop_db_thread()
-    logging.warning("System stopped gracefully")
+import argparse, logging, os, yaml
 
 
 parser = argparse.ArgumentParser(
@@ -23,7 +10,10 @@ parser = argparse.ArgumentParser(
     )
 )
 parser.add_argument(
-    "-c", "--cron", help="Fetches ~4d of posts, not everything", action="store_true",
+    "-c",
+    "--cron",
+    help="Fetches ~4d of posts, not everything",
+    action="store_true",
 )
 parser.add_argument(
     "-t",
@@ -58,10 +48,7 @@ elif args.verbose:
 else:
     log_level = logging.WARNING
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=log_level
-)
+logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=log_level)
 
 subreddits = []
 if os.path.isfile(args.subreddits[0]):
@@ -74,9 +61,6 @@ else:
     subreddits = args.subreddits
 
 pushshift = Pushshift()
-pushshift.start_db_thread()
-
-signal.signal(signal.SIGINT, graceful_stop)
 
 types_to_fetch = []
 if args.type == "both":
@@ -88,5 +72,3 @@ else:
 for type_to_fetch in types_to_fetch:
     for subreddit in subreddits:
         pushshift.pull_subreddit(subreddit, type_to_fetch, args.cron)
-
-pushshift.stop_db_thread()

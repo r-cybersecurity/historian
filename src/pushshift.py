@@ -1,10 +1,9 @@
-import logging, queue, requests, threading, time
+import logging, requests, time
 from datetime import datetime
-import mysql.connector
-from mysql.connector import Error
 
-from src.db import SolitudeDB
+from config.config import *
 from src.transcriber import Transcriber
+from unsafemysql import UnsafeMySQLWriter, UnsafeMySQLItem
 
 
 class Pushshift:
@@ -30,63 +29,16 @@ class Pushshift:
     def __init__(self):
         self.start_epoch = int(datetime.utcnow().timestamp())
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.write_queue = queue.Queue(maxsize=6000)
-        self.kill_threads = False
+        self.unsafedb = UnsafeMySQLWriter(
+            db_config_host,
+            db_config_port,
+            db_config_user,
+            db_config_passwd,
+            db_config_database,
+        )
 
-    def start_db_thread(self):
-        self.logger.info("starting data processor")
-        self.active_data_processor = threading.Thread(target=self.write_thread_loop)
-        self.active_data_processor.start()
-
-    def stop_db_thread(self):
-        self.logger.info("setting kill bit, waiting for graceful thread stop")
-        self.kill_threads = True
-        self.active_data_processor.join()
-        self.logger.info("threads have closed")
-
-    def write_thread_loop(self):
-        self.write_db = SolitudeDB()
-        while True:
-            try:
-                self.write_thread()
-                if self.kill_threads and self.write_queue.empty():
-                    try:  # we pretty much take it or leave it here
-                        self.write_db.commit_write()
-                    except Exception:
-                        pass
-                    self.write_db.disconnect()
-                    break
-            except Exception as e:
-                self.logger.error(f"write_thread threw error: {e}")
-                time.sleep(5)
-
-    def write_thread(self):
-        if self.write_queue.empty():
-            time.sleep(1)
-            return
-
-        item = self.write_queue.get()
-
-        try:
-            transcription = Transcriber(item["contents"], item["type"], item["from"])
-        except Exception as e:
-            self.logger.warning(f"exception caught when transcribing: {e}")
-            return
-
-        if transcription.valid:
-            item_db_dict = transcription.get_dict()
-            if transcription.type == "submission":
-                self.write_db.write(
-                    self.db_submission_insert_update, item_db_dict,
-                )
-            elif transcription.type == "comment":
-                self.write_db.write(
-                    self.db_comment_insert_update, item_db_dict,
-                )
-            else:
-                self.logger.critical(f"item type not implemented: {transcription.type}")
-        else:
-            self.logger.warning(f"an item was not valid from: {item['from']}")
+    def __del__(self):
+        del self.unsafedb
 
     def common_pushshift_setup(self):
         self.logger.info("setting up to roll through pushshift API")
@@ -141,14 +93,46 @@ class Pushshift:
                 previous_epoch = item["created_utc"] - 1
                 item_count += 1
 
-                self.write_queue.put(
-                    {"from": new_url, "type": item_type, "contents": item}
-                )
+                try:
+                    transcription = Transcriber(
+                        item["contents"], item["type"], item["from"]
+                    )
+                except Exception as e:
+                    self.logger.warning(f"exception caught when transcribing: {e}")
+                    return
+
+                if transcription.valid:
+                    if transcription.type == "submission":
+                        item_to_save = UnsafeMySQLItem(
+                            self.db_submission_insert_update,
+                            transcription.get_dict(),
+                            item["from"],
+                        )
+                    elif transcription.type == "comment":
+                        item_to_save = UnsafeMySQLItem(
+                            self.db_comment_insert_update,
+                            transcription.get_dict(),
+                            item["from"],
+                        )
+                    else:
+                        self.logger.critical(
+                            f"item type not implemented: {transcription.type}"
+                        )
+                    self.unsafedb.put_data(item_to_save)
+                else:
+                    self.logger.warning(f"an item was not valid from: {item['from']}")
 
             tempstamp = datetime.fromtimestamp(previous_epoch).strftime("%Y-%m-%d")
             self.logger.debug(
                 f"retrieved {item_count} {item_type}s through {tempstamp}"
             )
+
+            # lazily check for errors
+            bad_item = self.unsafedb.get_failure()
+            if bad_item is not None:
+                self.logger.critical(
+                    f"error from UnsafeMySQL - source: {bad_item.notes} ; problem: {bad_item.error}"
+                )
 
             if update_flag and self.start_epoch - previous_epoch > 345600:
                 self.logger.info(f"stopping pull for {subreddit} due to update flag")
