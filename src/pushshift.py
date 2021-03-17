@@ -95,24 +95,24 @@ class Pushshift:
 
                 try:
                     transcription = Transcriber(
-                        item["contents"], item["type"], item["from"]
+                        item, item_type
                     )
                 except Exception as e:
                     self.logger.warning(f"exception caught when transcribing: {e}")
-                    return
+                    continue
 
                 if transcription.valid:
                     if transcription.type == "submission":
                         item_to_save = UnsafeMySQLItem(
                             self.db_submission_insert_update,
                             transcription.get_dict(),
-                            item["from"],
+                            new_url,
                         )
                     elif transcription.type == "comment":
                         item_to_save = UnsafeMySQLItem(
                             self.db_comment_insert_update,
                             transcription.get_dict(),
-                            item["from"],
+                            new_url,
                         )
                     else:
                         self.logger.critical(
