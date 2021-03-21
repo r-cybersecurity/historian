@@ -38,8 +38,8 @@ class Pushshift:
         )
 
     def __del__(self):
-        self.logger.info("terminating pushisft object")
-        self.unsafedb._stop_thread()
+        self.logger.info("terminating pushshift object")
+        del self.unsafedb
 
     def common_pushshift_setup(self):
         self.logger.info("setting up to roll through pushshift API")
