@@ -72,3 +72,5 @@ else:
 for type_to_fetch in types_to_fetch:
     for subreddit in subreddits:
         pushshift.pull_subreddit(subreddit, type_to_fetch, args.cron)
+
+del pushshift

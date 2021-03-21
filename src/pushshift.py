@@ -38,6 +38,7 @@ class Pushshift:
         )
 
     def __del__(self):
+        self.logger.info("terminating")
         del self.unsafedb
 
     def common_pushshift_setup(self):
