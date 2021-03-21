@@ -54,12 +54,16 @@ class Transcriber:
         return False
 
     def interpret_status(self):
+        self.status = 200
+
+        if self.does_key_exist("distinguished"):
+            if self.origin["distinguished"] is not None:
+                self.status = 206
+
         if self.body == "[deleted]" or self.author == "[deleted]":
             self.status = 410
         elif self.body == "[removed]" or self.author == "[removed]":
             self.status = 403
-        else:
-            self.status = 200
 
         if self.does_key_exist("removed_by_category"):
             if self.origin["removed_by_category"] == "automod_filtered":
