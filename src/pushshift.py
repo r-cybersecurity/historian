@@ -37,6 +37,10 @@ class Pushshift:
             db_config_database,
         )
 
+    def __del__(self):
+        self.logger.info("terminating pushshift object, stopping UnsafeMySQLWriter")
+        self.unsafedb._stop_thread()
+
     def common_pushshift_setup(self):
         self.logger.info("setting up to roll through pushshift API")
         self.item_count = 0
